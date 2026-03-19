@@ -46,6 +46,16 @@ export function generateApiKey(): string {
   return 'sh_' + Array.from(bytes).map((b) => chars[b % chars.length]).join('')
 }
 
+export const COMPATIBLE_FRAMEWORKS = [
+  { value: 'claude-code', label: 'Claude Code' },
+  { value: 'cursor', label: 'Cursor' },
+  { value: 'windsurf', label: 'Windsurf' },
+  { value: 'openclaw', label: 'OpenClaw' },
+  { value: 'aider', label: 'Aider' },
+  { value: 'continue', label: 'Continue.dev' },
+  { value: 'generic', label: 'Generic (any agent)' },
+] as const
+
 export const SKILL_CATEGORIES = [
   'productivity',
   'development',

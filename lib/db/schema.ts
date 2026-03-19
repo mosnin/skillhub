@@ -6,6 +6,7 @@ import {
   boolean,
   uuid,
   unique,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
@@ -40,6 +41,29 @@ export const skills = pgTable('skills', {
   isPublished: boolean('is_published').notNull().default(false),
   isFeatured: boolean('is_featured').notNull().default(false),
   isSuspended: boolean('is_suspended').notNull().default(false),
+
+  // OpenClaw-compatible fields
+  compatibleWith: text('compatible_with').array().default(['claude-code']),
+  userInvocable: boolean('user_invocable').notNull().default(true),
+  homepage: text('homepage'),
+  skillMetadata: jsonb('skill_metadata'), // stores openclaw metadata.openclaw block
+
+  // GitHub import tracking
+  githubRepo: text('github_repo'),
+  githubPath: text('github_path'),
+  githubRef: text('github_ref'),
+
+  // Validation
+  validationStatus: text('validation_status').notNull().default('pending'),
+  validationErrors: text('validation_errors').array().default([]),
+  validationWarnings: text('validation_warnings').array().default([]),
+
+  // Security scanning
+  scanStatus: text('scan_status').notNull().default('pending'),
+  scanId: text('scan_id'),
+  scanResults: jsonb('scan_results'),
+  scanCompletedAt: timestamp('scan_completed_at'),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
