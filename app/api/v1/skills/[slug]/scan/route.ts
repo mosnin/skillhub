@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { skills } from '@/lib/db/schema'
+import { skills, users } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { getAnalysis } from '@/lib/virustotal'
+import { sendEmail, scanCompleteEmail } from '@/lib/email'
 
 /**
  * GET /api/v1/skills/:slug/scan
@@ -26,16 +27,39 @@ export async function GET(
     const result = await getAnalysis(skill.scanId)
 
     if (result.status !== 'pending') {
+      const newScanStatus = result.status === 'flagged' ? 'flagged' : 'clean'
+
       await db
         .update(skills)
         .set({
-          scanStatus: result.status === 'flagged' ? 'flagged' : 'clean',
+          scanStatus: newScanStatus,
           scanResults: result as any,
           scanCompletedAt: new Date(),
           // Suspend if flagged by multiple engines
           isSuspended: result.status === 'flagged' && (result.stats?.malicious || 0) > 2,
         })
         .where(eq(skills.id, skill.id))
+
+      // Send email notification to author — non-blocking
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://skillhub.dev'
+      db.query.users
+        .findFirst({ where: eq(users.id, skill.authorId) })
+        .then((author) => {
+          if (author?.email) {
+            sendEmail(
+              scanCompleteEmail({
+                to: author.email,
+                skillName: skill.name,
+                skillSlug: skill.slug,
+                status: newScanStatus as 'clean' | 'flagged',
+                appUrl,
+              })
+            )
+          }
+        })
+        .catch(() => {
+          // Ignore email errors — don't affect the response
+        })
 
       return NextResponse.json({
         slug: skill.slug,

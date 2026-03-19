@@ -1,15 +1,24 @@
 import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { users, purchases, skills } from '@/lib/db/schema'
-import { eq, desc, sum, count, and, gte, sql } from 'drizzle-orm'
+import { eq, desc, sum, count, and, gte } from 'drizzle-orm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { DollarSign, TrendingUp, ArrowUpRight, Link as LinkIcon, AlertCircle } from 'lucide-react'
-import { formatPrice } from '@/lib/stripe'
+import {
+  DollarSign,
+  TrendingUp,
+  ArrowUpRight,
+  AlertCircle,
+  Wallet,
+  Clock,
+  CheckCircle2,
+} from 'lucide-react'
+import { formatPrice, stripe } from '@/lib/stripe'
 import { timeAgo } from '@/lib/utils'
 import Link from 'next/link'
 import { ConnectStripeButton } from './connect-stripe'
+import { PayoutButton } from './payout-button'
 
 async function getEarningsData(clerkId: string) {
   const user = await db.query.users.findFirst({
@@ -65,13 +74,68 @@ async function getEarningsData(clerkId: string) {
   }
 }
 
+async function getStripeBalanceData(stripeAccountId: string) {
+  try {
+    const [balance, payouts] = await Promise.all([
+      stripe.balance.retrieve({ stripeAccount: stripeAccountId }),
+      stripe.payouts.list({ limit: 5 }, { stripeAccount: stripeAccountId }),
+    ])
+
+    const availableUsd = balance.available.find((b) => b.currency === 'usd')
+    const pendingUsd = balance.pending.find((b) => b.currency === 'usd')
+
+    return {
+      availableCents: availableUsd?.amount ?? 0,
+      pendingCents: pendingUsd?.amount ?? 0,
+      recentPayouts: payouts.data,
+    }
+  } catch {
+    return null
+  }
+}
+
+function payoutStatusBadge(status: string) {
+  switch (status) {
+    case 'paid':
+      return (
+        <Badge className="text-xs gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10">
+          <CheckCircle2 className="h-3 w-3" />
+          Paid
+        </Badge>
+      )
+    case 'pending':
+      return (
+        <Badge variant="secondary" className="text-xs gap-1">
+          <Clock className="h-3 w-3" />
+          Pending
+        </Badge>
+      )
+    case 'in_transit':
+      return (
+        <Badge variant="secondary" className="text-xs gap-1">
+          <ArrowUpRight className="h-3 w-3" />
+          In Transit
+        </Badge>
+      )
+    default:
+      return <Badge variant="outline" className="text-xs">{status}</Badge>
+  }
+}
+
 export default async function EarningsPage() {
   const { userId } = auth()
   const data = await getEarningsData(userId!)
 
   if (!data) return null
 
-  const { user, allTimeEarnings, allTimeSales, thisMonthEarnings, thisMonthSales, recentSales } = data
+  const { user, allTimeEarnings, allTimeSales, thisMonthEarnings, thisMonthSales, recentSales } =
+    data
+
+  // Only fetch Stripe balance data if the account is connected and enabled
+  const stripeData =
+    user.stripeAccountEnabled && user.stripeAccountId
+      ? await getStripeBalanceData(user.stripeAccountId)
+      : null
 
   return (
     <div className="space-y-6">
@@ -82,18 +146,91 @@ export default async function EarningsPage() {
         </p>
       </div>
 
-      {/* Stripe Connect Banner */}
+      {/* Stripe Connect Banner — shown only when NOT connected */}
       {!user.stripeAccountEnabled && (
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-yellow-400">Connect Stripe to receive payouts</p>
+            <p className="text-sm font-medium text-yellow-400">
+              Connect Stripe to receive payouts
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               Connect your Stripe account to receive 80% of every sale directly to your bank.
             </p>
           </div>
           <ConnectStripeButton />
         </div>
+      )}
+
+      {/* Stripe Balance & Payouts — shown only when connected */}
+      {user.stripeAccountEnabled && stripeData && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                Stripe Balance &amp; Payouts
+              </CardTitle>
+              <PayoutButton />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Balance summary */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs text-muted-foreground mb-1">Available Balance</p>
+                <p className="text-2xl font-bold text-emerald-400">
+                  {formatPrice(stripeData.availableCents)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Ready to pay out</p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs text-muted-foreground mb-1">Pending Balance</p>
+                <p className="text-2xl font-bold">
+                  {formatPrice(stripeData.pendingCents)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Processing (2–7 days)</p>
+              </div>
+            </div>
+
+            {/* Recent payouts */}
+            {stripeData.recentPayouts.length > 0 && (
+              <div>
+                <p className="text-sm font-medium mb-3">Recent Payouts</p>
+                <div className="space-y-2">
+                  {stripeData.recentPayouts.map((payout) => (
+                    <div
+                      key={payout.id}
+                      className="flex items-center justify-between rounded-md border border-border px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        {payoutStatusBadge(payout.status)}
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(payout.created * 1000).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm font-medium">
+                        {formatPrice(payout.amount)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {stripeData.recentPayouts.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No payouts yet. Request one when your available balance is greater than $0.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats */}
@@ -164,13 +301,15 @@ export default async function EarningsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentSales.map(({ purchase, skill }) => (
+              {recentSales.map(({ purchase, skill: purchasedSkill }) => (
                 <div
                   key={purchase.id}
                   className="flex items-center justify-between rounded-md border border-border p-3"
                 >
                   <div>
-                    <p className="text-sm font-medium">{skill?.name || 'Unknown skill'}</p>
+                    <p className="text-sm font-medium">
+                      {purchasedSkill?.name || 'Unknown skill'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {timeAgo(purchase.createdAt)}
                     </p>
