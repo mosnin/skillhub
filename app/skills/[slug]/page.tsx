@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { skills, users, reviews, purchases } from '@/lib/db/schema'
-import { eq, avg, count, and, sql } from 'drizzle-orm'
+import { eq, avg, count, and, ne, desc, sql } from 'drizzle-orm'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { InstallCommand } from '@/components/install-command'
 import { StarRating } from '@/components/star-rating'
@@ -62,6 +62,29 @@ async function getRatingStats(skillId: string) {
   }
 }
 
+async function getSimilarSkills(categoryStr: string, currentSlugStr: string) {
+  return db
+    .select({
+      id: skills.id,
+      slug: skills.slug,
+      name: skills.name,
+      description: skills.description,
+      priceCents: skills.priceCents,
+      category: skills.category,
+    })
+    .from(skills)
+    .where(
+      and(
+        eq(skills.isPublished, true),
+        eq(skills.isSuspended, false),
+        eq(skills.category, categoryStr),
+        ne(skills.slug, currentSlugStr)
+      )
+    )
+    .orderBy(desc(skills.downloads))
+    .limit(4)
+}
+
 async function getUserPurchase(userId: string | null, skillId: string) {
   if (!userId) return null
   const dbUser = await db.query.users.findFirst({
@@ -84,10 +107,11 @@ export default async function SkillPage({ params }: SkillPageProps) {
   if (!data) notFound()
 
   const { skill, author } = data
-  const [reviewList, ratingStats, userPurchase] = await Promise.all([
+  const [reviewList, ratingStats, userPurchase, similarSkills] = await Promise.all([
     getReviews(skill.id),
     getRatingStats(skill.id),
     getUserPurchase(userId, skill.id),
+    getSimilarSkills(skill.category, skill.slug),
   ])
 
   const isFree = skill.priceCents === 0
@@ -300,6 +324,22 @@ export default async function SkillPage({ params }: SkillPageProps) {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Similar Skills */}
+          {similarSkills.length > 0 && (
+            <div className="rounded-lg border border-border bg-card p-5">
+              <h3 className="text-sm font-semibold mb-3">Similar Skills</h3>
+              <div className="space-y-2">
+                {similarSkills.map((s) => (
+                  <Link key={s.id} href={`/skills/${s.slug}`} className="block rounded-lg border border-border bg-card p-3 hover:border-primary/50 transition-colors">
+                    <div className="font-medium text-sm">{s.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.description}</div>
+                    <div className="text-xs text-primary mt-2">{s.priceCents === 0 ? 'Free' : formatPrice(s.priceCents)}</div>
+                  </Link>
+                ))}
               </div>
             </div>
           )}

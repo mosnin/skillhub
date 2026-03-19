@@ -103,6 +103,52 @@ export function scanCompleteEmail(opts: {
   return { to, subject, html }
 }
 
+export function newVersionEmail(opts: {
+  to: string
+  skillName: string
+  skillSlug: string
+  newVersion: string
+  changelog: string | null
+  appUrl: string
+}): EmailPayload {
+  const { to, skillName, skillSlug, newVersion, changelog, appUrl } = opts
+  const skillUrl = `${appUrl}/skills/${skillSlug}`
+  const subject = `${skillName} updated to v${newVersion}`
+
+  const changelogBlock = changelog
+    ? `<div style="background-color:#111111;border-left:3px solid #a855f7;border-radius:0 6px 6px 0;padding:14px 16px;margin:16px 0;">
+        <p style="font-size:13px;font-weight:600;color:#a855f7;margin:0 0 6px;">What's new in v${newVersion}</p>
+        <p style="font-size:14px;color:#d4d4d4;line-height:1.6;margin:0;white-space:pre-wrap;">${changelog}</p>
+      </div>`
+    : `<p style="${baseStyles.p}">No changelog was provided for this release.</p>`
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${subject}</title></head>
+<body style="${baseStyles.body}">
+  <div style="${baseStyles.wrapper}">
+    <div style="${baseStyles.card}">
+      <a href="${appUrl}" style="${baseStyles.logo}">SkillHub</a>
+      <h1 style="${baseStyles.h1}">Skill Updated</h1>
+      <p style="${baseStyles.p}">
+        <span style="${baseStyles.highlight}">${skillName}</span> has been updated to
+        <span style="${baseStyles.highlight}">v${newVersion}</span>.
+      </p>
+      ${changelogBlock}
+      <hr style="${baseStyles.divider}">
+      <a href="${skillUrl}" style="${baseStyles.button}">View Skill</a>
+    </div>
+    <p style="${baseStyles.footer}">
+      You received this email because you purchased this skill on SkillHub.<br>
+      &copy; ${new Date().getFullYear()} SkillHub. All rights reserved.
+    </p>
+  </div>
+</body>
+</html>`
+
+  return { to, subject, html }
+}
+
 export function newReviewEmail(opts: {
   to: string
   skillName: string

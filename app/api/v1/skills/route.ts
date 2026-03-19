@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { skills, users } from '@/lib/db/schema'
 import { eq, and, ilike, desc, asc, or, sql } from 'drizzle-orm'
+import { rateLimit } from '@/lib/rate-limit'
 
 /**
  * SkillHub V1 API — Skills listing
@@ -17,6 +18,15 @@ import { eq, and, ilike, desc, asc, or, sql } from 'drizzle-orm'
  *   ?offset=0
  */
 export async function GET(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for') ?? 'anonymous'
+  const rl = rateLimit(`v1:skills:${ip}`, 60, 60_000) // 60 req/min
+  if (!rl.success) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, {
+      status: 429,
+      headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) }
+    })
+  }
+
   const { searchParams } = new URL(req.url)
   const q = searchParams.get('q')
   const category = searchParams.get('category')

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
-import { skills, skillVersions, users } from '@/lib/db/schema'
+import { skills, skillVersions, users, purchases } from '@/lib/db/schema'
 import { eq, and, desc } from 'drizzle-orm'
 import { z } from 'zod'
+import { newVersionEmail, sendEmail } from '@/lib/email'
+import { createNotification } from '@/lib/notifications'
 
 const versionSchema = z.object({
   version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Version must be in semver format (e.g. 1.2.3)'),
@@ -105,6 +107,44 @@ export async function POST(
       updatedAt: new Date(),
     })
     .where(eq(skills.id, skill.id))
+
+  // Non-blocking: notify the author that the version was published
+  createNotification(
+    skill.authorId,
+    'new_version',
+    'Version Published',
+    `Your skill ${skill.name} was updated to v${version}`,
+    `/dashboard/skills/${skill.slug}/versions`
+  ).catch(() => {})
+
+  // Non-blocking: notify all purchasers of the new version
+  Promise.all(
+    (async () => {
+      const buyers = await db
+        .select({ userId: purchases.userId })
+        .from(purchases)
+        .where(and(eq(purchases.skillId, skill.id), eq(purchases.status, 'completed')))
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://skillhub.dev'
+
+      return buyers.map(async ({ userId: buyerId }) => {
+        const buyer = await db.query.users.findFirst({
+          where: eq(users.id, buyerId),
+        })
+        if (!buyer?.email) return
+        await sendEmail(
+          newVersionEmail({
+            to: buyer.email,
+            skillName: skill.name,
+            skillSlug: skill.slug,
+            newVersion: version,
+            changelog: changelog ?? null,
+            appUrl,
+          })
+        )
+      })
+    })()
+  ).catch(() => {})
 
   return NextResponse.json({ version: newVersion }, { status: 201 })
 }

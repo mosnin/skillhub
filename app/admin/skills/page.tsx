@@ -17,6 +17,7 @@ export default async function AdminSkillsPage() {
       isFeatured: skills.isFeatured,
       isSuspended: skills.isSuspended,
       scanStatus: skills.scanStatus,
+      adminNote: skills.adminNote,
       createdAt: skills.createdAt,
       authorUsername: users.username,
     })
@@ -58,6 +59,11 @@ export default async function AdminSkillsPage() {
                         {skill.name}
                       </Link>
                       <p className="text-xs text-muted-foreground mt-0.5">{skill.slug}</p>
+                      {skill.adminNote && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">
+                          Note: {skill.adminNote}
+                        </p>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -104,6 +110,8 @@ export default async function AdminSkillsPage() {
                       skillSlug={skill.slug}
                       isSuspended={skill.isSuspended}
                       isFeatured={skill.isFeatured}
+                      isPublished={skill.isPublished}
+                      adminNote={skill.adminNote}
                     />
                   </td>
                 </tr>

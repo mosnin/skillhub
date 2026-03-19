@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Package, DollarSign, Key, Upload } from 'lucide-react'
+import { LayoutDashboard, Package, DollarSign, Key, Upload, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/dashboard/skills', label: 'My Skills', icon: Package },
   { href: '/dashboard/earnings', label: 'Earnings', icon: DollarSign },
   { href: '/dashboard/api-keys', label: 'API Keys', icon: Key },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
 ]
 
 export function DashboardNav() {

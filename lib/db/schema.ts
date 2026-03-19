@@ -53,6 +53,9 @@ export const skills = pgTable('skills', {
   githubPath: text('github_path'),
   githubRef: text('github_ref'),
 
+  // Admin
+  adminNote: text('admin_note'),
+
   // Validation
   validationStatus: text('validation_status').notNull().default('pending'),
   validationErrors: text('validation_errors').array().default([]),
@@ -127,6 +130,64 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'new_sale' | 'new_review' | 'scan_complete' | 'new_version' | 'admin_note'
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  href: text('href'),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const skillViews = pgTable('skill_views', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  skillId: uuid('skill_id')
+    .notNull()
+    .references(() => skills.id, { onDelete: 'cascade' }),
+  visitorHash: text('visitor_hash'), // hashed IP+UA for dedup without storing PII
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const collections = pgTable('collections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  authorId: uuid('author_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  description: text('description'),
+  isPublished: boolean('is_published').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+export const collectionSkills = pgTable('collection_skills', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  collectionId: uuid('collection_id')
+    .notNull()
+    .references(() => collections.id, { onDelete: 'cascade' }),
+  skillId: uuid('skill_id')
+    .notNull()
+    .references(() => skills.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+// CLI login flow: browser-based token exchange
+export const cliLoginTokens = pgTable('cli_login_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  token: text('token').notNull().unique(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Skill = typeof skills.$inferSelect
@@ -134,3 +195,5 @@ export type NewSkill = typeof skills.$inferInsert
 export type Purchase = typeof purchases.$inferSelect
 export type Review = typeof reviews.$inferSelect
 export type ApiKey = typeof apiKeys.$inferSelect
+export type Notification = typeof notifications.$inferSelect
+export type Collection = typeof collections.$inferSelect

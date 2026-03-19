@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { href: '/admin/skills', label: 'Skills', icon: Package },
   { href: '/admin/users', label: 'Users', icon: Users },
+  { href: '/admin/stats', label: 'Stats', icon: BarChart3 },
 ]
 
 export function AdminNav() {

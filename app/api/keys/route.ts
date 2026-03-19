@@ -5,6 +5,7 @@ import { users, apiKeys } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { generateApiKey } from '@/lib/utils'
 import { z } from 'zod'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function GET() {
   const { userId } = auth()
@@ -30,6 +31,11 @@ export async function POST(req: NextRequest) {
 
   const user = await db.query.users.findFirst({ where: eq(users.clerkId, userId) })
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const rl = rateLimit(`keys:${userId}`, 5, 60_000) // 5 key creates per minute per user
+  if (!rl.success) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
+  }
 
   // Max 10 keys per user
   const existing = await db.query.apiKeys.findMany({ where: eq(apiKeys.userId, user.id) })

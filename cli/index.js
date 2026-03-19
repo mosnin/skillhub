@@ -125,7 +125,16 @@ function writeIndex(index, global = false) {
 }
 
 function getApiKey(options = {}) {
-  return options.key || process.env.SKILLHUB_API_KEY
+  if (options.key) return options.key
+  if (process.env.SKILLHUB_API_KEY) return process.env.SKILLHUB_API_KEY
+  // Check config file
+  try {
+    const configPath = path.join(os.homedir(), '.skillhub', 'config.json')
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    return config.apiKey || null
+  } catch {
+    return null
+  }
 }
 
 // ─── Frontmatter parser (mirrors server-side logic) ──────────────────────────
@@ -673,6 +682,94 @@ async function cmdInfo() {
   log()
   log(`Install dir (project): ${c('gray', path.join(process.cwd(), '.skillhub', 'skills'))}`)
   log(`Install dir (global):  ${c('gray', path.join(os.homedir(), '.skillhub', 'skills'))}`)
+}
+
+async function cmdLogin(options = {}) {
+  // 1. Create a polling token
+  let token
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/cli-token`, { method: 'POST' })
+    if (!res.ok) { err('Failed to start login flow'); process.exit(1) }
+    token = res.json()?.token
+  } catch (e) {
+    err('Cannot reach SkillHub:', e.message)
+    process.exit(1)
+  }
+
+  // 2. Open browser
+  const loginUrl = `${API_BASE}/cli-auth?token=${token}`
+  log()
+  log(c('bold', 'Opening browser for authorization...'))
+  log()
+  log(`  ${c('cyan', loginUrl)}`)
+  log()
+  log(c('dim', 'If browser did not open, visit the URL above manually.'))
+  log()
+
+  // Try to open browser (cross-platform)
+  try {
+    const { execSync } = require('child_process')
+    const platform = process.platform
+    if (platform === 'darwin') execSync(`open "${loginUrl}"`, { stdio: 'ignore' })
+    else if (platform === 'win32') execSync(`start "" "${loginUrl}"`, { stdio: 'ignore' })
+    else execSync(`xdg-open "${loginUrl}"`, { stdio: 'ignore' })
+  } catch { /* silent - URL was printed above */ }
+
+  // 3. Poll for completion
+  const pollInterval = 2000 // 2s
+  const maxPolls = 60 // 120s total
+  let apiKey = null
+
+  process.stdout.write(c('dim', 'Waiting for authorization'))
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(resolve => setTimeout(resolve, pollInterval))
+    process.stdout.write('.')
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/cli-poll?token=${token}`)
+      const data = res.json()
+      if (data?.status === 'authorized') {
+        apiKey = data.key
+        break
+      }
+      if (data?.status === 'expired') {
+        process.stdout.write('\n')
+        err('Login token expired. Please try again.')
+        process.exit(1)
+      }
+    } catch { /* continue polling */ }
+  }
+  process.stdout.write('\n')
+
+  if (!apiKey) {
+    err('Authorization timed out. Please try again.')
+    process.exit(1)
+  }
+
+  // 4. Save to config file
+  const configPath = path.join(os.homedir(), '.skillhub', 'config.json')
+  let config = {}
+  try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')) } catch {}
+  config.apiKey = apiKey
+  fs.mkdirSync(path.dirname(configPath), { recursive: true })
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+
+  log()
+  ok(`Logged in! API key saved to ${configPath}`)
+  log()
+  log(`  Use: ${c('cyan', 'skillhub whoami')} to verify`)
+  log()
+}
+
+async function cmdLogout() {
+  const configPath = path.join(os.homedir(), '.skillhub', 'config.json')
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    delete config.apiKey
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+    ok('Logged out. API key removed from config.')
+  } catch {
+    warn('No saved credentials found.')
+  }
 }
 
 function cmdHelp() {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SignInButton, SignUpButton, UserButton, useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
+import { NotificationBell } from '@/components/notification-bell'
 import { Zap, Search, LayoutDashboard, Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -66,6 +67,7 @@ export function Navbar() {
                   Publish Skill
                 </Button>
               </Link>
+              <NotificationBell />
               <UserButton afterSignOutUrl="/" />
             </div>
           ) : (

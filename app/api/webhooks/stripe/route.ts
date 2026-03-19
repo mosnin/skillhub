@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { purchases, users, skills } from '@/lib/db/schema'
 import { eq, sql } from 'drizzle-orm'
 import type Stripe from 'stripe'
+import { createNotification } from '@/lib/notifications'
 
 export async function POST(req: NextRequest) {
   const body = await req.text()
@@ -33,37 +34,55 @@ export async function POST(req: NextRequest) {
 
     if (!purchase) return NextResponse.json({ received: true })
 
-    // Mark purchase as completed
-    await db
-      .update(purchases)
-      .set({
-        status: 'completed',
-        stripePaymentIntentId: session.payment_intent as string,
-      })
-      .where(eq(purchases.id, purchaseId))
-
-    // Update creator earnings
-    const skill = await db.query.skills.findFirst({
-      where: eq(skills.id, purchase.skillId),
-    })
-
-    if (skill) {
+    try {
+      // Mark purchase as completed
       await db
-        .update(users)
+        .update(purchases)
         .set({
-          totalEarningsCents: sql`${users.totalEarningsCents} + ${purchase.creatorEarningsCents}`,
+          status: 'completed',
+          stripePaymentIntentId: session.payment_intent as string,
         })
-        .where(eq(users.id, skill.authorId))
+        .where(eq(purchases.id, purchaseId))
+
+      // Update creator earnings
+      const skill = await db.query.skills.findFirst({
+        where: eq(skills.id, purchase.skillId),
+      })
+
+      if (skill) {
+        await db
+          .update(users)
+          .set({
+            totalEarningsCents: sql`${users.totalEarningsCents} + ${purchase.creatorEarningsCents}`,
+          })
+          .where(eq(users.id, skill.authorId))
+
+        createNotification(
+          skill.authorId,
+          'new_sale',
+          'New Sale',
+          `Someone purchased ${skill.name}`,
+          '/dashboard/earnings'
+        ).catch(() => {})
+      }
+    } catch (err) {
+      console.error('[stripe webhook] checkout.session.completed error:', err)
+      // still return 200 so Stripe doesn't retry - the webhook was received
     }
   }
 
   if (event.type === 'account.updated') {
     const account = event.data.object as Stripe.Account
-    if (account.details_submitted && account.charges_enabled) {
-      await db
-        .update(users)
-        .set({ stripeAccountEnabled: true })
-        .where(eq(users.stripeAccountId, account.id))
+    try {
+      if (account.details_submitted && account.charges_enabled) {
+        await db
+          .update(users)
+          .set({ stripeAccountEnabled: true })
+          .where(eq(users.stripeAccountId, account.id))
+      }
+    } catch (err) {
+      console.error('[stripe webhook] account.updated error:', err)
+      // still return 200 so Stripe doesn't retry - the webhook was received
     }
   }
 

@@ -4,11 +4,18 @@ import { db } from '@/lib/db'
 import { skills, users, purchases } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { stripe, calculateFees } from '@/lib/stripe'
+import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   const { userId } = auth()
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const ip = req.headers.get('x-forwarded-for') ?? userId ?? 'anonymous'
+  const rl = rateLimit(`checkout:${ip}`, 10, 60_000) // 10/min
+  if (!rl.success) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
   }
 
   const user = await db.query.users.findFirst({
