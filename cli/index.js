@@ -790,6 +790,8 @@ function cmdHelp() {
     ['update [slug]', 'Update installed skill(s)'],
     ['validate [path]', 'Validate a SKILL.md locally'],
     ['publish [path]', 'Publish a skill (requires API key)'],
+    ['login', 'Log in via browser (saves API key)'],
+    ['logout', 'Remove saved API key'],
     ['whoami', 'Show authenticated user info'],
     ['info', 'Show CLI configuration'],
   ]
@@ -838,6 +840,8 @@ async function main() {
     case 'update': case 'upgrade':  await cmdUpdate(rest[0], options); break
     case 'validate': case 'lint':   await cmdValidate(rest[0], options); break
     case 'publish': case 'pub':     await cmdPublish(rest[0], options); break
+    case 'login': case 'auth':      await cmdLogin(options); break
+    case 'logout':                  await cmdLogout(); break
     case 'whoami':                  await cmdWhoami(options); break
     case 'info': case 'config':     await cmdInfo(); break
     case 'help': case '--help': case '-h': case undefined: cmdHelp(); break
