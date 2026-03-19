@@ -1,0 +1,15 @@
+{
+  "name": "skillhub",
+  "version": "0.1.0",
+  "description": "The CLI for SkillHub — The AI Agent Skills Marketplace",
+  "keywords": ["ai", "skills", "agent", "claude", "cursor", "llm"],
+  "license": "MIT",
+  "main": "index.js",
+  "bin": {
+    "skillhub": "./index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
